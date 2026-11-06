@@ -11,9 +11,10 @@ from p_tqdm import p_map
 from ase import Atoms
 from ase.io import write
 from src.utils.zeopp_utils import mof_properties
+from src.evaluation.cell import cell_matrix, DATASETS
 
 
-def compute_properties(pred_dict: Dict, data_idx: int, zeo_dir: Path, remove_solvent: bool = True, sample_idx: int = 0, use_gt: bool = False) -> Optional[Dict]:
+def compute_properties(pred_dict: Dict, data_idx: int, zeo_dir: Path, data: str, remove_solvent: bool = True, sample_idx: int = 0, use_gt: bool = False) -> Optional[Dict]:
     # Handle OOM exception
     if pred_dict is None:
         return None
@@ -36,7 +37,7 @@ def compute_properties(pred_dict: Dict, data_idx: int, zeo_dir: Path, remove_sol
     atoms = Atoms(
         symbols=pred_dict['atom_types'][mask],
         positions=coords[mask],
-        cell=lattice,
+        cell=cell_matrix(lattice, data),
         pbc=True
     )
 
@@ -74,7 +75,7 @@ def main(args):
     prediction_list = torch.load(collated_file, map_location='cpu')
     
     # Create save directory
-    zeo_dir = Path(args.pred_dir) / "zeo"
+    zeo_dir = Path(args.pred_dir) / f"zeo_{args.data}"
     zeo_dir.mkdir(exist_ok=True)
     print(f"INFO:: Saving ZEO++ properties to {zeo_dir}")
 
@@ -84,6 +85,7 @@ def main(args):
     compute_func = partial(
         compute_properties,
         zeo_dir=zeo_dir,
+        data=args.data,
         remove_solvent=args.remove_solvent,
         use_gt=args.use_gt
     )
@@ -113,6 +115,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pred_dir", type=str)
+    parser.add_argument("--data", type=str, required=True, choices=DATASETS)
     parser.add_argument('--keep_solvent', action='store_false', dest='remove_solvent') # default: solvent removed
     parser.add_argument('--use_gt', action='store_true', dest='use_gt') # default: use predictions
     parser.add_argument("--num_cpus", type=int, default=48)

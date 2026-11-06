@@ -73,8 +73,17 @@ class SimpleMOFModule(LightningModule):
             **flow_process_args,
         )
     
+    def _data_name(self) -> str:
+        """Dataset name (bwdb / odac25) from the datamodule; decides the cell orientation (src/evaluation/cell.py)."""
+        dm = getattr(self.trainer, "datamodule", None) if self._trainer is not None else None
+        name = getattr(dm, "lmdb_suffix", None)
+        if name is None:
+            raise ValueError("Cannot determine the dataset name (datamodule.lmdb_suffix) for the cell orientation")
+        return name
+
     def setup(self, stage: str) -> None:
         """Set the model for training, validation and inference."""
+        self.structure_module.data_name = self._data_name()
         if stage == "predict" and not (
             torch.cuda.is_available()
             and torch.cuda.get_device_properties(torch.device("cuda")).major >= 8
@@ -272,6 +281,7 @@ class SimpleMOFModule(LightningModule):
                             block_type[i],
                             match_mode,
                             self.matcher_kwargs,
+                            self._data_name(),
                         )
                     )
 
@@ -318,6 +328,12 @@ class SimpleMOFModule(LightningModule):
             self.val_rmsd.reset()
             self.validation_step_outputs.clear() # free memory
 
+    def _steering_args(self) -> Optional[dict[str, Any]]:
+        steering_args = self.predict_args.get('steering_args', None)
+        if steering_args is None:
+            return None
+        return {**steering_args, "data": self._data_name()}
+
     def predict_step(self, batch: dict[str, Tensor], batch_idx: int) -> dict[str, Any]:
         num_samples = self.predict_args.get('num_samples', 1)
 
@@ -328,7 +344,7 @@ class SimpleMOFModule(LightningModule):
                 use_sde_coords=self.predict_args['use_sde_coords'],
                 center_during_sampling=self.predict_args['sampling_center_coords'],
                 refine_final=self.predict_args['refine_final'],
-                steering_args=self.predict_args.get('steering_args', None),
+                steering_args=self._steering_args(),
                 multiplicity_flow_sample=num_samples,
             )
             

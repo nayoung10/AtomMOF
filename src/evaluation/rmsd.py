@@ -14,8 +14,10 @@ from ase import Atoms
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.analysis.structure_matcher import StructureMatcher
 
+from src.evaluation.cell import cell_matrix, DATASETS
 
-def compute_rmsd(pred_dict, num_samples, remove_solvent=True, stol=0.5, ltol=0.3, angle_tol=10) -> Tuple[List[float], int]:
+
+def compute_rmsd(pred_dict, num_samples, data, remove_solvent=True, stol=0.5, ltol=0.3, angle_tol=10) -> Tuple[List[float], int]:
     """
     Computes RMSD for all samples in a single prediction dictionary.
     """
@@ -44,14 +46,14 @@ def compute_rmsd(pred_dict, num_samples, remove_solvent=True, stol=0.5, ltol=0.3
         pred_atoms = Atoms(
             symbols=pred_dict['atom_types'][mask],
             positions=pred_coords[mask],
-            cell=pred_lattice,
+            cell=cell_matrix(pred_lattice, data),
             pbc=True
         )
 
         true_atoms = Atoms(
             symbols=pred_dict['atom_types'][mask],
             positions=pred_dict['true_coords'][mask],
-            cell=pred_dict['true_lattice'],
+            cell=cell_matrix(pred_dict['true_lattice'], data),
             pbc=True
         )
 
@@ -92,6 +94,7 @@ def main(args):
         delayed(compute_rmsd)(
             pred_dict,
             num_samples=args.num_samples,
+            data=args.data,
             remove_solvent=args.remove_solvent,
             stol=args.stol,
             ltol=args.ltol,
@@ -109,7 +112,7 @@ def main(args):
     rmsd_df['num_atoms'] = list(num_atoms_data)
 
     # Save results as CSV
-    output_file = pred_dir / f'rmsd_results_stol-{args.stol}_ltol-{args.ltol}_angle-{args.angle_tol}.csv'
+    output_file = pred_dir / f'rmsd_results_{args.data}_stol-{args.stol}_ltol-{args.ltol}_angle-{args.angle_tol}.csv'
     rmsd_df.to_csv(output_file, index=True)
     print(f"\nRMSD results saved to {output_file}")
 
@@ -124,6 +127,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--pred_dir', type=str, required=True)
+    parser.add_argument('--data', type=str, required=True, choices=DATASETS)
     parser.add_argument('--keep_solvent', action='store_false', dest='remove_solvent')
     parser.add_argument('--num_samples', type=int, default=None)
     parser.add_argument('--num_cpus', type=int, default=1) # NOTE: 1 is faster

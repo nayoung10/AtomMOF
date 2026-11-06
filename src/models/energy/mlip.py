@@ -8,12 +8,15 @@ from fairchem.core.units.mlip_unit import load_predict_unit
 from fairchem.core.datasets import data_list_collater
 from fairchem.core.datasets.atomic_data import AtomicData
 
+from src.evaluation.cell import cell_matrix
+
 ESEN_CKPT_PATH = "logs/esen_sm_odac25_full.pt"
 
 
 class MLIPEnergy(nn.Module):
-    def __init__(self, device: str = "cuda"):
+    def __init__(self, data: str, device: str = "cuda"):
         super().__init__()
+        self.data = data  # dataset name: decides the cell orientation (src/evaluation/cell.py)
         self.device = device
         self.predictor = load_predict_unit(ESEN_CKPT_PATH, device=device)
 
@@ -32,7 +35,7 @@ class MLIPEnergy(nn.Module):
             atoms = Atoms(
                 numbers=atomic_numbers_np[i][atom_mask_np[i]],
                 positions=coords_np[i][atom_mask_np[i]],
-                cell=lattice_np[i],
+                cell=cell_matrix(lattice_np[i], self.data),
                 pbc=True
             )
             data = AtomicData.from_ase(atoms, task_name='odac', r_edges=False, r_data_keys=["spin", "charge"])

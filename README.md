@@ -9,8 +9,13 @@
   <img src="assets/overview.png" width="60%" />
 </p>
 
+## News
+
+- **2026-11-06 (v1.1.0):** Fixed the unit-cell orientation used in BWDB evaluation. BWDB match rates are higher than reported in arXiv v1 (e.g., AtomMOF-L 12.97% → 15.22% at stol 0.3). Evaluation scripts now require `--data`. Thanks to Tin Hadži Veljković ([@stases](https://github.com/stases)) for reporting it. See the [release notes](https://github.com/nayoung10/AtomMOF/releases/tag/v1.1.0).
+
 ## Table of Contents
 
+- [News](#news)
 - [Installation](#installation)
   - [Clone Repository](#clone-repository)
   - [Setup Environment](#setup-environment)
@@ -369,8 +374,9 @@ python src/evaluation/collate_predictions.py --pred_dir <path/to/pred_dir>
 #### Match Rate & RMSD
 
 ```bash
-python src/evaluation/rmsd.py \
+python -m src.evaluation.rmsd \
   --pred_dir <path/to/pred_dir> \
+  --data bwdb \
   --num_cpus <num_cpus> \
   --stol <stol> \
   --ltol <ltol> \
@@ -380,6 +386,7 @@ python src/evaluation/rmsd.py \
 **Arguments:**
 
 - `--pred_dir`: Path to the prediction directory containing `collated_predictions.pt` (output of `collate_predictions.py`).
+- `--data`: Dataset the predictions come from (`bwdb` or `odac25`); sets the unit-cell orientation of the stored coordinates. Required by every evaluation script below; output files are named with it (e.g., `rmsd_results_bwdb_stol-0.5_ltol-0.3_angle-10.csv`).
 - `--num_cpus`: Number of CPUs for parallel computation (default: 1).
 - `--stol`: Site tolerance for structure matching (default: 0.5).
 - `--ltol`: Length tolerance for structure matching (default: 0.3).
@@ -391,8 +398,9 @@ Property evaluation requires [`zeo++`](https://www.zeoplusplus.org/download.html
 
 ```bash
 export ZEO_PATH=<path/to/zeo++/network>
-python src/evaluation/property.py \
+python -m src.evaluation.property \
   --pred_dir <path/to/pred_dir> \
+  --data bwdb \
   --num_cpus <num_cpus>
 ```
 
@@ -426,28 +434,29 @@ After generating steered structures, evaluate them with the following metrics:
 
 ##### Validity (with `MOFChecker`)
 
-An MOF is considered valid if it passes all `MOFChecker` checks, including the presence of key elements (e.g., C/H and a metal), no atomic overlaps, chemically reasonable coordination environments, sufficient porosity, and no isolated molecules. Generates `validity_results.csv` in the prediction directory. Requires `zeo++` on your `PATH`.
+An MOF is considered valid if it passes all `MOFChecker` checks, including the presence of key elements (e.g., C/H and a metal), no atomic overlaps, chemically reasonable coordination environments, sufficient porosity, and no isolated molecules. Generates `validity_results_<data>.csv` in the prediction directory. Requires `zeo++` on your `PATH`.
 
 ```bash
 export PATH="<path/to/zeo++>:$PATH"
-python -m src.evaluation.validity --pred_dir <path/to/pred_dir> --num_cpus <num_cpus>
+python -m src.evaluation.validity --pred_dir <path/to/pred_dir> --data bwdb --num_cpus <num_cpus>
 ```
 
 ##### Structure Validity
 
-A predicted crystal structure is considered valid if (i) all pairwise interatomic distances are at least 0.5 Å, and (ii) the unit-cell volume is at least 0.1 Å³. Generates `structure_validity_results.csv` in the prediction directory.
+A predicted crystal structure is considered valid if (i) all pairwise interatomic distances are at least 0.5 Å, and (ii) the unit-cell volume is at least 0.1 Å³. Generates `structure_validity_results_<data>.csv` in the prediction directory.
 
 ```bash
-python -m src.evaluation.structure_validity --pred_dir <path/to/pred_dir> --num_cpus <num_cpus>
+python -m src.evaluation.structure_validity --pred_dir <path/to/pred_dir> --data bwdb --num_cpus <num_cpus>
 ```
 
 ##### Energy Evaluation
 
-Computes the MLIP energy levels for both predicted and ground-truth structures, which can then be used to compute the formation energy error (eV/atom). Generates `energy_results.csv` in `<pred_dir>/mlip_energy_<model_name>/`.
+Computes the MLIP energy levels for both predicted and ground-truth structures, which can then be used to compute the formation energy error (eV/atom). Generates `energy_results.csv` in `<pred_dir>/mlip_energy_<model_name>_<data>/`.
 
 ```bash
 python -m src.evaluation.mlip_energy \
   --pred_dir <path/to/pred_dir> \
+  --data bwdb \
   --mlip_model esen \
   --mlip_ckpt_dir <path/to/mlip_ckpt_dir>
 ```

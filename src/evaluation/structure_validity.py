@@ -15,6 +15,8 @@ from ase import Atoms
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.core import Structure
 
+from src.evaluation.cell import cell_matrix, DATASETS
+
 
 def structure_validity(crystal: Structure, cutoff=0.5) -> bool:
     dist_mat = crystal.distance_matrix
@@ -26,7 +28,7 @@ def structure_validity(crystal: Structure, cutoff=0.5) -> bool:
     else:
         return True
 
-def compute_structure_validity(pred_dict, num_samples, cutoff=0.5, remove_solvent=True) -> List[Dict[str, Any]]:
+def compute_structure_validity(pred_dict, num_samples, data, cutoff=0.5, remove_solvent=True) -> List[Dict[str, Any]]:
     """
     Computes validity for all samples in a single prediction dictionary.
     Returns a list of dictionaries with validity results for each sample.
@@ -67,7 +69,7 @@ def compute_structure_validity(pred_dict, num_samples, cutoff=0.5, remove_solven
             pred_atoms = Atoms(
                 symbols=current_atom_types,
                 positions=current_coords,
-                cell=pred_lattice,
+                cell=cell_matrix(pred_lattice, data),
                 pbc=True,
             )
             pred_structure = AseAtomsAdaptor.get_structure(pred_atoms)
@@ -134,6 +136,7 @@ def main(args):
         delayed(compute_structure_validity)(
             pred_dict, 
             args.num_samples, 
+            data=args.data,
             cutoff=args.cutoff, 
             remove_solvent=args.remove_solvent
         )
@@ -157,7 +160,7 @@ def main(args):
     validity_df = pd.DataFrame(flat_results)[cols_order]
 
     # Save results as CSV
-    output_file = pred_dir / 'structure_validity_results.csv'
+    output_file = pred_dir / f'structure_validity_results_{args.data}.csv'
     validity_df.to_csv(output_file, index=False)
     print(f"\nValidity results saved to {output_file}")
 
@@ -176,6 +179,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--pred_dir', type=str, required=True)
+    parser.add_argument('--data', type=str, required=True, choices=DATASETS)
     parser.add_argument('--keep_solvent', action='store_false', dest='remove_solvent')
     parser.add_argument('--num_samples', type=int, default=None)
     parser.add_argument('--cutoff', type=float, default=0.5)

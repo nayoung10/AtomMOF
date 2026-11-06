@@ -14,12 +14,13 @@ from ase import Atoms
 from pymatgen.io.ase import AseAtomsAdaptor
 
 from src.utils.mofchecker_utils import is_mof_valid, EXPECTED_CHECK_VALUES
+from src.evaluation.cell import cell_matrix, DATASETS
 
 # Expected keys for MOF validity checks
 EXPECTED_KEYS = list(EXPECTED_CHECK_VALUES.keys())
 
 
-def compute_validity(pred_dict, num_samples, remove_solvent=True, use_gt=False) -> List[Dict[str, Any]]:
+def compute_validity(pred_dict, num_samples, data, remove_solvent=True, use_gt=False) -> List[Dict[str, Any]]:
     """
     Computes validity for all samples in a single prediction dictionary.
     Returns a list of dictionaries with validity results for each sample.
@@ -57,7 +58,7 @@ def compute_validity(pred_dict, num_samples, remove_solvent=True, use_gt=False) 
         atoms = Atoms(
             symbols=pred_dict['atom_types'][mask],
             positions=current_coords[mask],
-            cell=current_lattice,
+            cell=cell_matrix(current_lattice, data),
             pbc=True
         )
         pred_structure = AseAtomsAdaptor.get_structure(atoms)
@@ -110,7 +111,7 @@ def main(args):
 
     # Compute validity for all predictions
     delayed_tasks = [
-        delayed(compute_validity)(pred_dict, args.num_samples, args.remove_solvent, args.use_gt)
+        delayed(compute_validity)(pred_dict, args.num_samples, args.data, args.remove_solvent, args.use_gt)
         for pred_dict in prediction_list
     ] 
     results = Parallel(n_jobs=args.num_cpus, verbose=10)(tqdm(delayed_tasks, desc="Computing Validity")) # List[List[Dict]]
@@ -127,7 +128,7 @@ def main(args):
     validity_df = pd.DataFrame(flat_results)[cols_order]
 
     # Save results as CSV
-    name = f'validity_results.csv' if not args.use_gt else f'validity_results_gt.csv'
+    name = f'validity_results_{args.data}.csv' if not args.use_gt else f'validity_results_gt_{args.data}.csv'
     output_file = pred_dir / name
     validity_df.to_csv(output_file, index=False)
     print(f"\nValidity results saved to {output_file}")
@@ -146,6 +147,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--pred_dir', type=str, required=True)
+    parser.add_argument('--data', type=str, required=True, choices=DATASETS)
     parser.add_argument('--keep_solvent', action='store_false', dest='remove_solvent') # default: solvent removed
     parser.add_argument('--use_gt', action='store_true') # default: use predictions
     parser.add_argument('--num_samples', type=int, default=None)

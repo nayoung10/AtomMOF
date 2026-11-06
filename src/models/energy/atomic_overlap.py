@@ -9,8 +9,9 @@ from src.models.loss.mic_dist import mic_pairwise_dist # TODO: Move to utils
 
 
 class AtomicOverlapEnergy(nn.Module):
-    def __init__(self,  tolerance=0.8, threshold_mode: str = 'sum'):
+    def __init__(self, data: str, tolerance=0.8, threshold_mode: str = 'sum'):
         super().__init__()
+        self.data = data  # dataset name: decides the cell orientation (src/evaluation/cell.py)
         self.tolerance = tolerance
         self.threshold_mode = threshold_mode
         
@@ -39,7 +40,7 @@ class AtomicOverlapEnergy(nn.Module):
             penalty energy: (B,) Soft atomic overlap penalty energy
         """
         # Compute pairwise distances with MIC
-        dists = mic_pairwise_dist(cart_coords, lattice_params) # Shape: (B, N, N)
+        dists = mic_pairwise_dist(cart_coords, lattice_params, self.data) # Shape: (B, N, N)
         
         # Look up Radii
         radii = self.radii_lookup[atomic_numbers] # (B, N)

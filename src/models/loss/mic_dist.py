@@ -74,7 +74,34 @@ def lattice_params_to_matrix(params: torch.Tensor) -> torch.Tensor:
     return lattice_matrix
 
 
-def mic_pairwise_dist(cart_coords: torch.Tensor, lattice_params: torch.Tensor) -> torch.Tensor:
+def lattice_params_to_matrix_pymatgen(params: torch.Tensor) -> torch.Tensor:
+    """Same as pymatgen Lattice.from_parameters (c along z, a in the xz plane), differentiable.
+
+    params: [B, 6] = (a, b, c, alpha, beta, gamma), angles in degrees. Returns [B, 3, 3], rows = a, b, c.
+    """
+    a, b, c = params[:, 0], params[:, 1], params[:, 2]
+    alpha, beta, gamma = (params[:, 3:6] * (np.pi / 180.0)).unbind(dim=1)
+    val = (torch.cos(alpha) * torch.cos(beta) - torch.cos(gamma)) / (torch.sin(alpha) * torch.sin(beta))
+    gamma_star = torch.arccos(val.clamp(-1.0 + 1e-7, 1.0 - 1e-7))
+    zeros = torch.zeros_like(a)
+    row_a = torch.stack([a * torch.sin(beta), zeros, a * torch.cos(beta)], dim=1)
+    row_b = torch.stack(
+        [-b * torch.sin(alpha) * torch.cos(gamma_star), b * torch.sin(alpha) * torch.sin(gamma_star), b * torch.cos(alpha)],
+        dim=1,
+    )
+    row_c = torch.stack([zeros, zeros, c], dim=1)
+    return torch.stack([row_a, row_b, row_c], dim=1)
+
+
+def lattice_params_to_matrix_for(params: torch.Tensor, data: str) -> torch.Tensor:
+    """Cell matrix in the orientation used by `data`'s preprocessing (see src/evaluation/cell.py)."""
+    from src.evaluation.cell import CELL_CONVENTION
+    if CELL_CONVENTION[data] == "pymatgen":
+        return lattice_params_to_matrix_pymatgen(params)
+    return lattice_params_to_matrix(params)
+
+
+def mic_pairwise_dist(cart_coords: torch.Tensor, lattice_params: torch.Tensor, data: str) -> torch.Tensor:
     """
     Computes MIC distances robustly for ANY lattice (Triclinic, Hexagonal, etc.)
     by checking the 27 nearest periodic images.
@@ -84,7 +111,7 @@ def mic_pairwise_dist(cart_coords: torch.Tensor, lattice_params: torch.Tensor) -
         lattice_params: [batch, 6] (a, b, c, alpha, beta, gamma)
     """    
     # 1. Get Lattice Matrix and Inverse
-    lattice_matrix = lattice_params_to_matrix(lattice_params) # [B, 3, 3]
+    lattice_matrix = lattice_params_to_matrix_for(lattice_params, data) # [B, 3, 3]
     inv_lattice = torch.inverse(lattice_matrix) # [B, 3, 3]
 
     # 2. Convert to Fractional Coordinates

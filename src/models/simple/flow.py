@@ -281,8 +281,11 @@ class AtomFlowMatching(Module):
         # Optional: MIC distance loss
         if use_dist_loss:
             # Compute MIC distances [B, N, N]
-            true_dists = mic_pairwise_dist(true_atom_coords, true_lattice)
-            pred_dists = mic_pairwise_dist(pred_atom_coords, pred_lattice)
+            data = getattr(self, 'data_name', None)  # set by SimpleMOFModule.setup from the datamodule
+            if data is None:
+                raise ValueError('use_dist_loss needs the dataset name to pick the cell orientation')
+            true_dists = mic_pairwise_dist(true_atom_coords, true_lattice, data)
+            pred_dists = mic_pairwise_dist(pred_atom_coords, pred_lattice, data)
 
             # Create mask
             pair_mask = (true_dists < dist_cutoff).float() # [B, N, N]
@@ -434,10 +437,11 @@ class AtomFlowMatching(Module):
             # Initialize potential
             if energy_fn == "atomic_overlap":
                 potential_fn = AtomicOverlapEnergy(
+                    data=steering_args["data"],
                     tolerance=steering_args["tolerance"],
                 ).to(self.device)
             elif energy_fn == "mlip":
-                potential_fn = MLIPEnergy(device='cuda')
+                potential_fn = MLIPEnergy(data=steering_args['data'], device='cuda')
             else:
                 raise ValueError(f"Unknown energy function: {energy_fn}")
 

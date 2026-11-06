@@ -2,6 +2,8 @@ import numpy as np
 from pymatgen.core import Structure, Lattice
 from pymatgen.analysis.structure_matcher import StructureMatcher
 
+from src.evaluation.cell import cell_matrix
+
 
 def find_best_match_rmsd(args: tuple) -> list:
     """
@@ -18,6 +20,7 @@ def find_best_match_rmsd(args: tuple) -> list:
         block_type,                 # (num_atoms, )
         match_mode,                 # str: 'all' or 'framework'
         matcher_kwargs,
+        data,                       # str: dataset name, decides the cell orientation
     ) = args
 
     # Determine mask
@@ -29,7 +32,7 @@ def find_best_match_rmsd(args: tuple) -> list:
     matcher = StructureMatcher.from_dict(matcher_kwargs)
     
     true_structure = Structure(
-        lattice=Lattice.from_parameters(*true_lattice),
+        lattice=Lattice(cell_matrix(true_lattice, data)),
         species=atom_types[final_mask],
         coords=true_coords[final_mask],
         coords_are_cartesian=True,
@@ -39,7 +42,7 @@ def find_best_match_rmsd(args: tuple) -> list:
     for i in range(pred_coords_samples.shape[0]):
         try:
             pred_structure = Structure(
-                lattice=Lattice.from_parameters(*pred_lattices_samples[i]),
+                lattice=Lattice(cell_matrix(pred_lattices_samples[i], data)),
                 species=atom_types[final_mask],
                 coords=pred_coords_samples[i, final_mask],
                 coords_are_cartesian=True,

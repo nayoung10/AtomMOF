@@ -14,6 +14,8 @@ import pandas as pd
 from ase import Atoms
 from tqdm import tqdm
 
+from src.evaluation.cell import cell_matrix, DATASETS
+
 
 @dataclass
 class EnergyResult:
@@ -56,7 +58,7 @@ def load_calculator(
     return calc
 
 
-def convert_entry_to_atoms(entry: Dict[str, Any], use_gt: bool = False, sample_idx: int = 0) -> Atoms:
+def convert_entry_to_atoms(entry: Dict[str, Any], data: str, use_gt: bool = False, sample_idx: int = 0) -> Atoms:
     """Helper to convert dictionary entry to ASE Atoms object."""
     if use_gt:
         coords = entry['true_coords']
@@ -68,7 +70,7 @@ def convert_entry_to_atoms(entry: Dict[str, Any], use_gt: bool = False, sample_i
     atoms = Atoms(
         symbols=entry['atom_types'],
         positions=coords,
-        cell=lattice,
+        cell=cell_matrix(lattice, data),
         pbc=True
     )
     return atoms
@@ -76,14 +78,15 @@ def convert_entry_to_atoms(entry: Dict[str, Any], use_gt: bool = False, sample_i
 
 def evaluate_pair(
     pred_dict: Dict[str, Any], 
-    calculator: Any
+    calculator: Any,
+    data: str,
 ) -> EnergyResult:
     """
     Computes potential energy for both Ground Truth and Predicted structures.
     """
     try:
         # --- 1. Evaluate Predicted Structure ---
-        atoms_pred = convert_entry_to_atoms(pred_dict, use_gt=False)
+        atoms_pred = convert_entry_to_atoms(pred_dict, data, use_gt=False)
         atoms_pred.calc = calculator
         
         e_pred = atoms_pred.get_potential_energy()
@@ -91,7 +94,7 @@ def evaluate_pair(
         epa_pred = e_pred / num_atoms
 
         # --- 2. Evaluate Ground Truth Structure ---
-        atoms_gt = convert_entry_to_atoms(pred_dict, use_gt=True)
+        atoms_gt = convert_entry_to_atoms(pred_dict, data, use_gt=True)
         atoms_gt.calc = calculator 
         
         e_gt = atoms_gt.get_potential_energy()
@@ -119,9 +122,9 @@ def evaluate_pair(
         )
 
 
-def setup_directories(pred_dir: Path, model_name: str) -> Tuple[Path, Path]:
+def setup_directories(pred_dir: Path, model_name: str, data: str) -> Tuple[Path, Path]:
     """Creates and returns the output and log directories."""
-    output_dir = pred_dir / f'mlip_energy_{model_name}'
+    output_dir = pred_dir / f'mlip_energy_{model_name}_{data}'
     logs_dir = output_dir / 'logs'
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -183,7 +186,7 @@ def main(args):
     prediction_list = torch.load(collated_file, map_location='cpu')
 
     # 2. Setup directories
-    output_dir, logs_dir = setup_directories(pred_dir, args.mlip_model)
+    output_dir, logs_dir = setup_directories(pred_dir, args.mlip_model, args.data)
 
     # 3. Load Calculator
     calculator = load_calculator(
@@ -201,7 +204,7 @@ def main(args):
     for i, pred_dict in tqdm(enumerate(prediction_list), total=len(prediction_list)):
         
         # Run evaluation
-        result = evaluate_pair(pred_dict, calculator)
+        result = evaluate_pair(pred_dict, calculator, args.data)
         
         # Log failures immediately
         if not result.success:
@@ -220,6 +223,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--pred_dir', type=str, required=True, help="Directory containing collated_predictions.pt")
+    parser.add_argument('--data', type=str, required=True, choices=DATASETS)
     parser.add_argument('--mlip_model', type=str, default='esen', choices=['uma-s', 'uma-m', 'esen'])
     parser.add_argument('--mlip_ckpt_dir', type=str, default=None, help="Required if using 'esen' model")
     parser.add_argument('--mlip_device', type=str, default='cuda')
